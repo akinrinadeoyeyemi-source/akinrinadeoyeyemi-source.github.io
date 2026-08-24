@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sevidesk Zapier API Documentation</title>
+  <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/favicon-32x32.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui.css">
+  <style>
+    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin: 0; background: #fafafa; }
+    .topbar { display: none; }
+
+    .sevidesk-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .sevidesk-header .logo-text {
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .sevidesk-header .logo-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #3b82f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 18px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .sevidesk-header .header-tag {
+      margin-left: auto;
+      background: rgba(59,130,246,0.15);
+      color: #93c5fd;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      border: 1px solid rgba(59,130,246,0.3);
+    }
+    .swagger-ui-wrapper { max-width: 1400px; margin: 0 auto; }
+    .swagger-ui { padding: 20px 24px; }
+    .swagger-ui .info { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="sevidesk-header">
+    <div class="logo-badge">S</div>
+    <span class="logo-text">Sevidesk</span>
+    <span class="header-tag">Zapier API v1.0</span>
+  </div>
+
+  <div class="swagger-ui-wrapper">
+    <div id="swagger-ui"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+
+  <script type="text/x-yaml" id="openapi-spec">
+openapi: 3.0.0
+info:
+  title: Sevidesk Zapier API
+  description: |
+    Public API for the Sevidesk Zapier integration. Exposes five operations
+    that map one-to-one to the triggers and actions configured in the
+    Sevidesk Zapier app:
+
+    - **Authentication** — validate an API key and confirm the organization.
+    - **New Ticket trigger** — poll for newly created tickets.
+    - **Updated Ticket trigger** — poll for recently updated tickets.
+    - **Create Ticket action** — create a new support ticket.
+    - **Add Message to Ticket action** — add a reply or internal note to an
+      existing ticket.
+
+    All operations share a single endpoint at `/v1/zapier-api` and are
+    selected via the `resource` and `action` query parameters.
+
+    The API is fronted by a Cloudflare Worker reverse proxy
+    (`api.sevidesk.com`) that forwards requests to a Supabase Edge Function.
+    The proxy injects a shared secret, applies CORS headers, and enforces
+    per-IP and per-key rate limits before the request reaches the backend.
+  version: 1.0.0
+  contact:
+    name: Sevidesk Support
+    url: https://sevidesk.com
+    email: support@sevidesk.com
+
+servers:
+  - url: https://api.sevidesk.com/v1
+    description: Production server
+  - url: https://api-dev.sevidesk.com/v1
+    description: Development server
+
+tags:
+  - name: Authentication
+    description: Validate the API key and confirm organization access.
+  - name: Triggers
+    description: Polling endpoints used by Zapier triggers.
+  - name: Actions
+    description: Endpoints used by Zapier create actions.
+
+paths:
+  /zapier-api:
+    get:
+      tags:
+        - Authentication
+        - Triggers
+      summary: Test authentication or poll for tickets
+      description: |
+        Universal GET endpoint shared by the Authentication test, the New
+        Ticket trigger, and the Updated Ticket trigger. The `resource` and
+        `action` query parameters select which operation runs.
+
+        | resource  | action         | Zapier role                  |
+        |-----------|----------------|------------------------------|
+        | `auth`    | `test`         | Authentication test          |
+        | `tickets` | `poll`         | New Ticket trigger           |
+        | `tickets` | `poll-updated` | Updated Ticket trigger       |
+      operationId: getZapierApi
+      parameters:
+        - $ref: '#/components/parameters/Resource'
+        - $ref: '#/components/parameters/ActionGet'
+        - $ref: '#/components/parameters/Since'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthTestResponse'
+                  - $ref: '#/components/schemas/TicketPollResponse'
+              examples:
+                auth_test:
+                  summary: Authentication test response
+                  value:
+                    authenticated: true
+                    organization_id: org-uuid-here
+                    organization_name: Acme Support
+                poll_tickets:
+                  summary: New Ticket trigger response
+                  value:
+                    - id: ticket-uuid-1
+                      ticket_number: 42
+                      subject: Login issue
+                      description: Customer cannot log in
+                      status: open
+                      priority: high
+                      source: email
+                      sender_email: customer@example.com
+                      sender_name: Jane Doe
+                      assigned_agent_id: null
+                      tags:
+                        - billing
+                      created_at: '2026-08-20T10:00:00Z'
+                      updated_at: '2026-08-20T10:00:00Z'
+                poll_updated:
+                  summary: Updated Ticket trigger response
+                  value:
+                    - id: ticket-uuid-2
+                      ticket_number: 41
+                      subject: Refund request
+                      description: Customer wants a refund
+                      status: pending
+                      priority: medium
+                      source: api
+                      sender_email: bob@example.com
+                      sender_name: Bob Smith
+                      assigned_agent_id: agent-uuid-here
+                      tags: []
+                      created_at: '2026-08-19T12:00:00Z'
+                      updated_at: '2026-08-20T14:30:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    post:
+      tags:
+        - Actions
+      summary: Create a ticket or add a message to a ticket
+      description: |
+        Universal POST endpoint shared by the Create Ticket action and the
+        Add Message to Ticket action. The `resource` and `action` query
+        parameters select which operation runs.
+
+        | resource  | action       | Zapier role                     |
+        |-----------|--------------|--------------------------------|
+        | `tickets` | `create`     | Create Ticket action            |
+        | `tickets` | `add-message`| Add Message to Ticket action    |
+      operationId: postZapierApi
+      parameters:
+        - $ref: '#/components/parameters/Resource'
+        - $ref: '#/components/parameters/ActionPost'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateTicketRequest'
+                - $ref: '#/components/schemas/AddMessageRequest'
+            examples:
+              create_ticket:
+                summary: Create a new ticket
+                value:
+                  subject: Refund request
+                  description: Customer is requesting a refund for order #1234
+                  sender_email: customer@example.com
+                  sender_name: Jane Doe
+                  priority: high
+                  tags: billing, refund
+              add_message:
+                summary: Add a reply to an existing ticket
+                value:
+                  ticket_number: 42
+                  message: Thank you for contacting us, we are looking into this.
+                  type: reply
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Ticket'
+                  - $ref: '#/components/schemas/AddMessageResponse'
+              examples:
+                create_ticket:
+                  summary: Ticket created
+                  value:
+                    id: ticket-uuid-new
+                    ticket_number: 43
+                    subject: Refund request
+                    description: Customer is requesting a refund for order #1234
+                    status: open
+                    priority: high
+                    source: api
+                    sender_email: customer@example.com
+                    sender_name: Jane Doe
+                    assigned_agent_id: null
+                    organization_id: org-uuid-here
+                    created_at: '2026-08-20T15:00:00Z'
+                    updated_at: '2026-08-20T15:00:00Z'
+                add_message_reply:
+                  summary: Reply added (email sent)
+                  value:
+                    ticket_id: ticket-uuid-1
+                    body: Thank you for contacting us, we are looking into this.
+                    direction: outbound
+                    sender_type: agent
+                    sender_name: Zapier
+                    channel: api
+                    created_at: '2026-08-20T15:05:00Z'
+                add_message_note:
+                  summary: Internal note added
+                  value:
+                    id: note-uuid-here
+                    ticket_id: ticket-uuid-1
+                    body: This ticket was escalated via Zapier.
+                    is_internal: true
+                    author_name: Zapier
+                    organization_id: org-uuid-here
+                    created_at: '2026-08-20T15:10:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+  parameters:
+    Resource:
+      name: resource
+      in: query
+      description: Resource type to operate on.
+      required: true
+      schema:
+        type: string
+        enum:
+          - tickets
+          - auth
+        example: tickets
+
+    ActionGet:
+      name: action
+      in: query
+      description: Action to perform on a GET request.
+      required: true
+      schema:
+        type: string
+        enum:
+          - poll
+          - poll-updated
+          - test
+        example: poll
+
+    ActionPost:
+      name: action
+      in: query
+      description: Action to perform on a POST request.
+      required: true
+      schema:
+        type: string
+        enum:
+          - create
+          - add-message
+        example: create
+
+    Since:
+      name: since
+      in: query
+      description: |
+        Optional ISO 8601 timestamp used by the polling triggers to fetch
+        only tickets created (for `poll`) or updated (for `poll-updated`)
+        after this point. If omitted, the most recent 100 tickets are
+        returned.
+      required: false
+      schema:
+        type: string
+        format: date-time
+        example: '2026-08-20T00:00:00Z'
+
+  schemas:
+    AuthTestResponse:
+      type: object
+      required:
+        - authenticated
+        - organization_id
+      properties:
+        authenticated:
+          type: boolean
+          description: Always `true` when the API key is valid.
+          example: true
+        organization_id:
+          type: string
+          format: uuid
+          description: UUID of the organization the API key belongs to.
+          example: org-uuid-here
+        organization_name:
+          type: string
+          description: Display name of the organization.
+          example: Acme Support
+
+    TicketPollResponse:
+      type: array
+      description: |
+        A bare JSON array of ticket objects. The `poll` action returns
+        tickets ordered by `created_at` descending; `poll-updated` returns
+        tickets ordered by `updated_at` descending. Both return at most
+        100 tickets and exclude soft-deleted tickets.
+      items:
+        $ref: '#/components/schemas/Ticket'
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique ticket identifier (UUID).
+          example: ticket-uuid-1
+        ticket_number:
+          type: integer
+          description: Human-readable ticket number used across the Sevidesk app.
+          example: 42
+        subject:
+          type: string
+          description: Ticket subject line.
+          example: Login issue
+        description:
+          type: string
+          description: Full ticket description or body.
+          example: Customer cannot log in to their account.
+        status:
+          type: string
+          enum:
+            - open
+            - pending
+            - closed
+          description: Current ticket status.
+          example: open
+        priority:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - urgent
+          description: Ticket priority level.
+          example: high
+        source:
+          type: string
+          description: How the ticket was created.
+          example: email
+        sender_email:
+          type: string
+          format: email
+          description: Email address of the person who submitted the ticket.
+          example: customer@example.com
+        sender_name:
+          type: string
+          nullable: true
+          description: Name of the person who submitted the ticket, if provided.
+          example: Jane Doe
+        assigned_agent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: UUID of the agent assigned to the ticket, if any.
+          example: agent-uuid-here
+        tags:
+          type: array
+          description: Tag names attached to the ticket.
+          items:
+            type: string
+          example:
+            - billing
+            - refund
+        created_at:
+          type: string
+          format: date-time
+          description: When the ticket was created.
+          example: '2026-08-20T10:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: When the ticket was last updated.
+          example: '2026-08-20T10:00:00Z'
+        organization_id:
+          type: string
+          format: uuid
+          description: UUID of the organization that owns the ticket.
+          example: org-uuid-here
+
+    CreateTicketRequest:
+      type: object
+      required:
+        - subject
+        - description
+        - sender_email
+      properties:
+        subject:
+          type: string
+          description: Ticket subject line.
+          example: Refund request
+        description:
+          type: string
+          description: Full ticket description or body.
+          example: Customer is requesting a refund for order #1234
+        sender_email:
+          type: string
+          format: email
+          description: Email address of the person who submitted the ticket.
+          example: customer@example.com
+        sender_name:
+          type: string
+          description: Name of the person who submitted the ticket.
+          example: Jane Doe
+        priority:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+            - urgent
+          description: |
+            Ticket priority. Defaults to `medium` if omitted or if the
+            value is not one of the allowed enum values.
+          default: medium
+          example: high
+        tags:
+          type: string
+          description: |
+            Comma-separated list of tag names to attach to the ticket.
+            Only tags that already exist in the organization will be
+            linked. Example: `billing, refund`.
+          example: billing, refund
+
+    AddMessageRequest:
+      type: object
+      required:
+        - ticket_number
+        - message
+      properties:
+        ticket_number:
+          type: integer
+          description: |
+            The human-readable ticket number. Also accepts strings with a
+            `TK` prefix (e.g. `TK-42` or `TK42`); the prefix is stripped
+            automatically.
+          example: 42
+        message:
+          type: string
+          description: Content of the reply or internal note.
+          example: Thank you for contacting us, we are looking into this.
+        type:
+          type: string
+          enum:
+            - reply
+            - note
+          description: |
+            Whether to send a reply (visible to the customer, delivered via
+            email through Sevidesk's reply pipeline) or add an internal note
+            (visible only inside Sevidesk). Defaults to `reply`.
+          default: reply
+          example: reply
+
+    AddMessageResponse:
+      type: object
+      description: |
+        The response shape depends on the `type` field in the request:
+
+        - **`reply`**: The message is routed through Sevidesk's send-reply
+          pipeline, which sends an email to the customer and creates a
+          message row. The response contains the reply data plus a
+          `channel` field set to `"api"`. If email delivery fails, a
+          fallback message row is created and the response includes
+          `email_sent: false` and an `email_error` field.
+        - **`note`**: An internal note is created in the `ticket_notes`
+          table. The response contains the note row.
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          description: UUID of the ticket the message was added to.
+          example: ticket-uuid-1
+        body:
+          type: string
+          description: The message content.
+          example: Thank you for contacting us.
+        direction:
+          type: string
+          description: Direction of the message (reply path only).
+          example: outbound
+        sender_type:
+          type: string
+          description: Who sent the message (reply path only).
+          example: agent
+        sender_name:
+          type: string
+          description: Display name of the sender.
+          example: Zapier
+        channel:
+          type: string
+          description: Channel the message was created through.
+          example: api
+        email_sent:
+          type: boolean
+          description: |
+            Present only on the fallback path. `false` means email delivery
+            failed and the message was saved inside Sevidesk only.
+          example: false
+        email_error:
+          type: string
+          description: Present only on the fallback path, describing why email delivery failed.
+          example: Email delivery failed
+        id:
+          type: string
+          format: uuid
+          description: Note identifier (note path only).
+          example: note-uuid-here
+        is_internal:
+          type: boolean
+          description: Whether the note is internal (note path only).
+          example: true
+        author_name:
+          type: string
+          description: Author of the note (note path only).
+          example: Zapier
+        created_at:
+          type: string
+          format: date-time
+          description: When the message or note was created.
+          example: '2026-08-20T15:05:00Z'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+          example: Missing or invalid API key
+        retry_after:
+          type: integer
+          description: |
+            Present only on 429 responses. Seconds to wait before
+            retrying.
+          example: 45
+
+  responses:
+    BadRequest:
+      description: Invalid request body or missing required fields.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: subject, description, and sender_email are required
+
+    Unauthorized:
+      description: Missing or invalid API key.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Missing or invalid API key
+
+    Forbidden:
+      description: Request did not carry the required proxy secret.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Forbidden
+
+    NotFound:
+      description: Ticket not found or unknown resource/action combination.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Ticket not found
+
+    TooManyRequests:
+      description: Rate limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Rate limit exceeded
+            retry_after: 45
+
+    InternalServerError:
+      description: Backend processing error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Failed to create ticket
+
+    BadGateway:
+      description: The Cloudflare proxy could not reach the upstream edge function.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Failed to reach upstream API
+
+    ServiceUnavailable:
+      description: The proxy is not fully configured (missing required secrets).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: API proxy not configured
+
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      name: X-API-Key
+      in: header
+      description: |
+        API key for authentication. Keys are prefixed with `svdk_live_`.
+        You can also pass the key as a Bearer token in the Authorization
+        header (`Authorization: Bearer svdk_live_...`) or as an `api_key`
+        query parameter.
+
+security:
+  - ApiKeyHeader: []
+
+x-rate-limit:
+  per-ip:
+    requests: 100
+    window: 60s
+    description: 100 requests per minute per client IP address.
+  per-key:
+    requests: 200
+    window: 60s
+    description: 200 requests per minute per API key.
+  </script>
+
+  <script>
+    window.onload = function () {
+      var yamlText = document.getElementById('openapi-spec').textContent;
+      var spec = jsyaml.load(yamlText);
+
+      window.ui = SwaggerUIBundle({
+        spec: spec,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: 'StandaloneLayout',
+        supportedSubmitMethods: ['get', 'post'],
+        docExpansion: 'list',
+        operationsSorter: 'alpha',
+        tagsSorter: 'alpha',
+        defaultModelsExpandDepth: 2,
+        defaultModelExpandDepth: 2,
+        filter: true,
+        showExtensions: true,
+        showCommonExtensions: true
+      });
+    };
+  </script>
+</body>
+</html>
